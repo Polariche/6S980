@@ -59,22 +59,29 @@ def convert_dataset(dataset: PuzzleDataset) -> PuzzleDataset:
     
     R = ext[..., :3, :3]
     T = ext[..., :3, -1:]
-    RT = torch.matmul(R, T)
+    RtT = torch.matmul(R.transpose(-1,-2), T)
 
-    find_z = torch.cat([abs(T), abs(RT)], dim=-2)
+    find_z = torch.cat([abs(T), abs(RtT)], dim=-2)
     z = torch.argmax(find_z, dim=-2)[0]
 
-    if (z < 3 and T[0, z] < 0) or (z >= 3 and RT[0, z] > 0):
+    if (z < 3 and T[0, z] < 0) or (z >= 3 and RtT[0, z] > 0):
        T *= -1
 
     # TODO: automatically determine perm
-    perm = [2,1,0]
+    aR = abs(R)
+    t1 = torch.sum(aR[..., (z+1)%3, 0] + aR[..., (z+2)%3, 1])
+    t2 = torch.sum(aR[..., (z+2)%3, 0] + aR[..., (z+1)%3, 1])
+    if t1 > t2:
+        perm = [(z+1)%3,(z+2)%3,z%3]
+    else:
+        perm = [(z+2)%3,(z+1)%3,z%3]
+
     R = R[..., perm,:]
     T = T[..., perm,:]
     
     # TODO: automatically determine axis
-    R[..., 0, :] *= -1
-    R[..., 1, :] *= -1
+    R[..., 0, :] *= torch.sign(R[..., 0, 0:1])
+    R[..., 1, :] *= -torch.sign(R[..., 1, 1:2])
     
     if z < 3:
         R = R.transpose(-1,-2)
@@ -83,7 +90,7 @@ def convert_dataset(dataset: PuzzleDataset) -> PuzzleDataset:
     ext[..., :3, :3] = R
     ext[..., :3, -1:] = T
     dataset['extrinsics'] = ext
-
+    print(ext)
     return dataset
 
 
